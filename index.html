@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENTINEL-X — AI Infrastructure Guardian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ============ DESIGN TOKENS ============ */
+:root{
+  --bg:#0A0F1C;
+  --surface:#111826;
+  --surface-2:#161F30;
+  --surface-3:#1C273B;
+  --border:#22304A;
+  --border-soft:#1A2439;
+  --cyan:#00D9FF;
+  --cyan-dim:#0891B2;
+  --amber:#FFB020;
+  --red:#FF4D5E;
+  --green:#2ECC71;
+  --text:#E8EEF7;
+  --text-muted:#8291AC;
+  --text-dim:#56617A;
+  --font-display:'Space Grotesk',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  overflow-x:hidden;
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(0,217,255,0.06), transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(255,77,94,0.05), transparent 35%);
+}
+::selection{background:var(--cyan);color:#001018;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;}
+::-webkit-scrollbar-thumb:hover{background:var(--cyan-dim);}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+.mono{font-family:var(--font-mono);}
+
+/* ============ APP SHELL ============ */
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh;}
+@media (max-width:900px){.app{grid-template-columns:1fr;}}
+
+/* Sidebar */
+.sidebar{
+  background:linear-gradient(180deg,#0C1220,#0A0E19);
+  border-right:1px solid var(--border-soft);
+  display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;padding:22px 16px;
+  z-index:40;
+}
+@media (max-width:900px){
+  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);transition:transform .25s ease;width:248px;}
+  .sidebar.open{transform:translateX(0);}
+}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px;border-bottom:1px solid var(--border-soft);margin-bottom:18px;}
+.brand-mark{
+  width:34px;height:34px;border-radius:9px;
+  background:conic-gradient(from 220deg,var(--cyan),#0A5A6C,var(--cyan));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 18px rgba(0,217,255,0.35);
+  flex-shrink:0;
+}
+.brand-mark svg{width:18px;height:18px;}
+.brand-text{line-height:1.1;}
+.brand-text .name{font-family:var(--font-display);font-weight:700;font-size:15px;letter-spacing:0.3px;}
+.brand-text .sub{font-size:10px;color:var(--text-dim);font-family:var(--font-mono);letter-spacing:0.5px;text-transform:uppercase;}
+
+.nav-group-label{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);margin:16px 8px 8px;font-weight:600;}
+.nav-item{
+  display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;
+  color:var(--text-muted);font-size:13.5px;font-weight:500;margin-bottom:2px;
+  transition:all .15s ease;border:1px solid transparent;position:relative;
+}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;opacity:0.85;}
+.nav-item:hover{background:var(--surface-2);color:var(--text);}
+.nav-item.active{
+  background:linear-gradient(90deg,rgba(0,217,255,0.14),rgba(0,217,255,0.02));
+  color:var(--cyan);border-color:rgba(0,217,255,0.25);
+}
+.nav-item.active svg{opacity:1;}
+.nav-badge{
+  margin-left:auto;font-family:var(--font-mono);font-size:10px;background:rgba(255,77,94,0.15);
+  color:var(--red);padding:1px 6px;border-radius:20px;font-weight:600;
+}
+.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--border-soft);}
+.status-pill{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);padding:8px;font-family:var(--font-mono);}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse-dot 2s infinite;}
+@keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+/* Main */
+.main{min-width:0;display:flex;flex-direction:column;}
+.topbar{
+  display:flex;align-items:center;gap:16px;padding:16px 28px;
+  border-bottom:1px solid var(--border-soft);position:sticky;top:0;
+  background:rgba(10,15,28,0.85);backdrop-filter:blur(10px);z-index:30;
+}
+.menu-btn{display:none;background:none;border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;}
+@media (max-width:900px){.menu-btn{display:flex;}}
+.page-title{font-family:var(--font-display);font-size:19px;font-weight:600;}
+.page-sub{font-size:12px;color:var(--text-dim);font-family:var(--font-mono);margin-top:2px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:18px;}
+.clock{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);white-space:nowrap;}
+.role-select{
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+  font-size:12px;padding:7px 10px;border-radius:8px;font-family:var(--font-body);
+}
+.bell-wrap{position:relative;width:36px;height:36px;border-radius:9px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
+.bell-wrap svg{width:16px;height:16px;color:var(--text-muted);}
+.bell-dot{position:absolute;top:6px;right:7px;width:7px;height:7px;background:var(--red);border-radius:50%;box-shadow:0 0 6px var(--red);}
+.avatar{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:13px;color:#001018;}
+
+.content{padding:24px 28px 60px;flex:1;}
+.view{display:none;animation:fadein .35s ease;}
+.view.active{display:block;}
+@keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* Cards / grid */
+.grid{display:grid;gap:16px;}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.grid-3{grid-template-columns:2fr 1fr;}
+.grid-2{grid-template-columns:1fr 1fr;}
+@media (max-width:1100px){.grid-4{grid-template-columns:repeat(2,1fr);}.grid-3{grid-template-columns:1fr;}}
+@media (max-width:640px){.grid-4{grid-template-columns:1fr;}.grid-2{grid-template-columns:1fr;}}
+
+.card{
+  background:linear-gradient(180deg,var(--surface),var(--surface-2));
+  border:1px solid var(--border-soft);border-radius:14px;padding:18px;
+  position:relative;overflow:hidden;
+}
+.card-head{display:flex;align-items:center;justify-content:between;margin-bottom:14px;}
+.card-title{font-family:var(--font-display);font-size:14px;font-weight:600;letter-spacing:0.2px;}
+.card-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.eyebrow{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);margin-bottom:6px;}
+
+/* Stat card */
+.stat-card{}
+.stat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+.stat-icon svg{width:18px;height:18px;}
+.stat-value{font-family:var(--font-display);font-size:30px;font-weight:700;line-height:1;}
+.stat-label{font-size:12.5px;color:var(--text-muted);margin-top:6px;}
+.stat-trend{font-family:var(--font-mono);font-size:11px;margin-top:10px;display:flex;align-items:center;gap:5px;}
+
+/* Health ring */
+.ring-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;}
+.ring-wrap svg{transform:rotate(-90deg);}
+.ring-num{position:absolute;text-align:center;}
+.ring-num .n{font-family:var(--font-display);font-weight:700;line-height:1;}
+.ring-num .l{font-size:9px;color:var(--text-dim);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.5px;}
+.pulse-critical{animation:pulseglow 1.6s infinite;}
+@keyframes pulseglow{0%,100%{filter:drop-shadow(0 0 2px var(--red));}50%{filter:drop-shadow(0 0 10px var(--red));}}
+
+/* Asset list rows */
+.asset-row{
+  display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:10px;
+  border:1px solid transparent;transition:all .15s ease;cursor:pointer;
+}
+.asset-row:hover{background:var(--surface-3);border-color:var(--border);}
+.asset-icon{width:38px;height:38px;border-radius:9px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--border);}
+.asset-icon svg{width:17px;height:17px;color:var(--cyan);}
+.asset-name{font-size:13.5px;font-weight:600;}
+.asset-meta{font-size:11px;color:var(--text-dim);font-family:var(--font-mono);margin-top:2px;}
+.badge{font-family:var(--font-mono);font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:0.3px;text-transform:uppercase;white-space:nowrap;}
+.badge-critical{background:rgba(255,77,94,0.14);color:var(--red);border:1px solid rgba(255,77,94,0.3);}
+.badge-moderate{background:rgba(255,176,32,0.14);color:var(--amber);border:1px solid rgba(255,176,32,0.3);}
+.badge-healthy{background:rgba(46,204,113,0.14);color:var(--green);border:1px solid rgba(46,204,113,0.3);}
+.badge-info{background:rgba(0,217,255,0.12);color:var(--cyan);border:1px solid rgba(0,217,255,0.28);}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;
+  padding:10px 16px;border-radius:9px;border:1px solid var(--border);
+  background:var(--surface-3);color:var(--text);transition:all .15s ease;
+}
+.btn:hover{border-color:var(--cyan-dim);}
+.btn svg{width:14px;height:14px;}
+.btn-primary{background:linear-gradient(135deg,var(--cyan),var(--cyan-dim));color:#001018;border:none;box-shadow:0 4px 18px rgba(0,217,255,0.25);}
+.btn-primary:hover{filter:brightness(1.08);}
+.btn-ghost{background:transparent;}
+.btn-sm{padding:6px 11px;font-size:12px;}
+.btn:disabled{opacity:0.45;cursor:not-allowed;}
+
+/* Signal feed (signature element) */
+.feed{max-height:340px;overflow-y:auto;font-family:var(--font-mono);font-size:11.5px;}
+.feed-item{display:flex;gap:10px;padding:9px 4px;border-bottom:1px dashed var(--border-soft);align-items:flex-start;}
+.feed-item .t{color:var(--text-dim);white-space:nowrap;}
+.feed-dot{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+
+/* Map */
+#leaflet-map{height:520px;border-radius:14px;overflow:hidden;border:1px solid var(--border-soft);filter:saturate(0.35) brightness(0.75) contrast(1.05);}
+.leaflet-popup-content-wrapper{background:var(--surface-2);color:var(--text);border-radius:10px;}
+.leaflet-popup-tip{background:var(--surface-2);}
+.map-legend{display:flex;gap:16px;margin-top:12px;font-size:11.5px;color:var(--text-muted);flex-wrap:wrap;}
+.map-legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend-dot{width:9px;height:9px;border-radius:50%;}
+
+/* Slider */
+.range-wrap{width:100%;}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:5px;border-radius:6px;
+  background:linear-gradient(90deg,var(--green),var(--amber),var(--red));outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+  background:#fff;border:3px solid var(--cyan);cursor:pointer;box-shadow:0 0 10px rgba(0,217,255,0.6);
+}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--cyan);cursor:pointer;}
+
+/* Tabs */
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--border-soft);margin-bottom:18px;flex-wrap:wrap;}
+.tab{padding:9px 14px;font-size:12.5px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent;}
+.tab.active{color:var(--cyan);border-color:var(--cyan);}
+
+/* Vision upload */
+.dropzone{
+  border:1.5px dashed var(--border);border-radius:14px;padding:38px 20px;text-align:center;
+  background:var(--surface);cursor:pointer;transition:all .15s ease;
+}
+.dropzone:hover,.dropzone.drag{border-color:var(--cyan);background:rgba(0,217,255,0.04);}
+.dropzone svg{width:34px;height:34px;color:var(--cyan);margin-bottom:12px;}
+#detectCanvasWrap{position:relative;display:none;}
+#detectCanvas{width:100%;border-radius:14px;border:1px solid var(--border-soft);display:block;}
+.det-tag{position:absolute;font-family:var(--font-mono);font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;transform:translateY(-100%);white-space:nowrap;}
+
+/* Copilot */
+.chat-window{height:440px;overflow-y:auto;padding:6px 4px;display:flex;flex-direction:column;gap:14px;}
+.msg{max-width:82%;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.55;}
+.msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--cyan-dim),var(--cyan));color:#001018;font-weight:500;border-bottom-right-radius:3px;}
+.msg.ai{align-self:flex-start;background:var(--surface-3);border:1px solid var(--border);border-bottom-left-radius:3px;}
+.msg.ai .cite{display:inline-block;font-family:var(--font-mono);font-size:10px;background:rgba(0,217,255,0.12);color:var(--cyan);padding:1px 6px;border-radius:5px;margin-left:4px;}
+.chip{display:inline-flex;font-size:12px;padding:8px 12px;border:1px solid var(--border);border-radius:20px;color:var(--text-muted);margin:4px 6px 0 0;background:var(--surface-2);}
+.chip:hover{border-color:var(--cyan-dim);color:var(--text);}
+.chat-input-row{display:flex;gap:10px;margin-top:14px;}
+.chat-input-row input{
+  flex:1;background:var(--surface-3);border:1px solid var(--border);color:var(--text);
+  padding:12px 14px;border-radius:10px;font-size:13px;
+}
+.chat-input-row input:focus{border-color:var(--cyan-dim);}
+.typing-dots span{width:5px;height:5px;background:var(--text-dim);border-radius:50%;display:inline-block;margin-right:3px;animation:blink 1.2s infinite;}
+.typing-dots span:nth-child(2){animation-delay:.2s;}
+.typing-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:0.25;}40%{opacity:1;}}
+
+/* Optimizer */
+.opt-row{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;border:1px solid var(--border-soft);margin-bottom:8px;transition:all .2s ease;}
+.opt-row.selected{border-color:rgba(46,204,113,0.4);background:rgba(46,204,113,0.06);}
+.opt-check{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.opt-row.selected .opt-check{background:var(--green);border-color:var(--green);}
+.opt-check svg{width:12px;height:12px;color:#001018;display:none;}
+.opt-row.selected .opt-check svg{display:block;}
+
+/* Toast */
+#toastHost{position:fixed;bottom:20px;right:20px;z-index:100;display:flex;flex-direction:column;gap:10px;}
+.toast{
+  background:var(--surface-3);border:1px solid var(--cyan-dim);border-radius:10px;padding:13px 16px;
+  font-size:12.5px;max-width:320px;box-shadow:0 10px 30px rgba(0,0,0,0.4);
+  animation:toastin .3s ease;display:flex;gap:10px;align-items:flex-start;
+}
+@keyframes toastin{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.toast svg{width:16px;height:16px;color:var(--cyan);flex-shrink:0;margin-top:1px;}
+
+/* small charts container */
+.chart-box{position:relative;height:220px;}
+.chart-box-sm{position:relative;height:90px;}
+
+hr.soft{border:none;border-top:1px solid var(--border-soft);margin:16px 0;}
+.muted{color:var(--text-muted);}
+.dim{color:var(--text-dim);}
+p.lead{color:var(--text-muted);font-size:13px;line-height:1.6;max-width:640px;}
+.flex-between{display:flex;align-items:center;justify-content:space-between;}
+.section-title{font-family:var(--font-display);font-size:16px;font-weight:600;margin-bottom:4px;}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16 7.5 20.5 12 22C16.5 20.5 20 16 20 11V5L12 2Z" stroke="#001018" stroke-width="1.8" fill="#001018" fill-opacity="0.12"/><path d="M9 12L11 14L15.5 9" stroke="#001018" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <div class="name">SENTINEL-X</div>
+        <div class="sub">Infra Guardian</div>
+      </div>
+    </div>
+
+    <div class="nav-group-label">Monitor</div>
+    <div class="nav-item active" data-view="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Command Center
+    </div>
+    <div class="nav-item" data-view="map">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+      GIS Asset Map
+    </div>
+    <div class="nav-item" data-view="twin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5z"/><path d="M3 7l9 5 9-5M12 22V12"/></svg>
+      Digital Twin
+    </div>
+
+    <div class="nav-group-label">Intelligence</div>
+    <div class="nav-item" data-view="vision">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      AI Vision Scan
+    </div>
+    <div class="nav-item" data-view="copilot">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.9-.94L3 21l1.94-5.6A8.4 8.4 0 0 1 3.5 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>
+      Ask SENTINEL
+    </div>
+    <div class="nav-item" data-view="optimizer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+      Budget Optimizer
+    </div>
+
+    <div class="nav-group-label">Operations</div>
+    <div class="nav-item" data-view="alerts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      Alerts
+      <span class="nav-badge" id="alertNavBadge">3</span>
+    </div>
+    <div class="nav-item" data-view="citizen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/><path d="M1 19v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg>
+      Citizen Reports
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-pill"><span class="status-dot"></span> ALL SYSTEMS NOMINAL</div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-btn" id="menuBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div>
+        <div class="page-title" id="pageTitle">Command Center</div>
+        <div class="page-sub" id="pageSub">NATIONAL INFRASTRUCTURE OVERVIEW · LIVE</div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock" id="clock">--:--:--</div>
+        <select class="role-select" id="roleSelect">
+          <option>Admin View</option>
+          <option>Engineer View</option>
+          <option>Inspector View</option>
+        </select>
+        <div class="bell-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bell-dot"></span></div>
+        <div class="avatar">YR</div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ============ DASHBOARD ============ -->
+      <section class="view active" id="view-dashboard">
+        <div class="grid grid-4" style="margin-bottom:16px;">
+          <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(0,217,255,0.12);"><svg viewBox="0 0 24 24" fill="none" stroke="#00D9FF" stroke-width="1.8"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/></svg></div>
+            <div class="stat-value" id="statTotal">0</div>
+            <div class="stat-label">Assets Monitored Nationwide</div>
+            <div class="stat-trend" style="color:var(--cyan);">▲ 4 added this week</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(255,77,94,0.12);"><svg viewBox="0 0 24 24" fill="none" stroke="#FF4D5E" stroke-width="1.8"><path d="M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L14.7 3.86a2 2 0 0 0-3.4 0z"/></svg></div>
+            <div class="stat-value" id="statCritical" style="color:var(--red);">0</div>
+            <div class="stat-label">Critical Risk Assets</div>
+            <div class="stat-trend" style="color:var(--red);">▲ 2 since last scan</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(46,204,113,0.12);"><svg viewBox="0 0 24 24" fill="none" stroke="#2ECC71" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+            <div class="stat-value" id="statHealth">0</div>
+            <div class="stat-label">Avg. National Health Score</div>
+            <div class="stat-trend" style="color:var(--green);">▲ Stable, +0.4 this month</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(255,176,32,0.12);"><svg viewBox="0 0 24 24" fill="none" stroke="#FFB020" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
+            <div class="stat-value" id="statAlerts" style="color:var(--amber);">0</div>
+            <div class="stat-label">Active Alerts Requiring Action</div>
+            <div class="stat-trend" style="color:var(--amber);">3 unacknowledged</div>
+          </div>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="card-title-row">
+              <div>
+                <div class="eyebrow">Risk Distribution</div>
+                <div class="section-title">Structural Health Across Asset Portfolio</div>
+              </div>
+              <button class="btn btn-sm btn-ghost" onclick="go('map')">Open full map →</button>
+            </div>
+            <div class="chart-box"><canvas id="riskChart"></canvas></div>
+            <hr class="soft">
+            <div class="eyebrow" style="margin-bottom:10px;">Priority Watchlist</div>
+            <div id="watchlist"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title-row">
+              <div>
+                <div class="eyebrow">Live Signal Feed</div>
+                <div class="section-title">AI Detection Stream</div>
+              </div>
+            </div>
+            <div class="feed" id="signalFeed"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:16px;">
+          <div class="card">
+            <div class="eyebrow">This Month</div>
+            <div class="section-title" style="margin-bottom:14px;">Inspection Coverage: Manual vs AI-Continuous</div>
+            <div class="chart-box"><canvas id="coverageChart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Portfolio Snapshot</div>
+            <div class="section-title" style="margin-bottom:14px;">Assets by Category</div>
+            <div class="chart-box"><canvas id="categoryChart"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MAP ============ -->
+      <section class="view" id="view-map">
+        <div class="grid" style="grid-template-columns:320px 1fr;">
+          <div class="card" style="max-height:600px;overflow-y:auto;">
+            <div class="eyebrow">Filter</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="mapFilters"></div>
+            <div id="mapAssetList"></div>
+          </div>
+          <div>
+            <div id="leaflet-map"></div>
+            <div class="map-legend">
+              <span><span class="legend-dot" style="background:var(--green);"></span> Healthy (80–100)</span>
+              <span><span class="legend-dot" style="background:var(--amber);"></span> Moderate (50–79)</span>
+              <span><span class="legend-dot" style="background:var(--red);"></span> Critical (&lt;50)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ DIGITAL TWIN ============ -->
+      <section class="view" id="view-twin">
+        <div class="card" style="margin-bottom:16px;">
+          <div class="eyebrow">Select Asset</div>
+          <select id="twinAssetSelect" class="role-select" style="width:100%;max-width:420px;"></select>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="flex-between" style="margin-bottom:6px;">
+              <div>
+                <div class="eyebrow" id="twinType">BRIDGE</div>
+                <div class="section-title" id="twinName" style="font-size:20px;">—</div>
+                <div class="dim mono" id="twinLoc" style="font-size:11.5px;margin-top:4px;">—</div>
+              </div>
+              <div class="ring-wrap" id="twinRingWrap"></div>
+            </div>
+
+            <hr class="soft">
+            <div class="flex-between" style="margin-bottom:8px;">
+              <div class="section-title" style="font-size:14px;">⏱ Time-Travel Simulator</div>
+              <span class="mono dim" style="font-size:11.5px;" id="twinDayLabel">Today (+0 days)</span>
+            </div>
+            <p class="lead" style="margin-bottom:10px;">Physics-informed degradation model — drag to project structural health forward in time based on current stress signatures.</p>
+            <input type="range" min="0" max="365" value="0" id="timeSlider">
+            <div class="chart-box" style="margin-top:16px;"><canvas id="decayChart"></canvas></div>
+
+            <hr class="soft">
+            <div class="grid grid-3" style="grid-template-columns:repeat(3,1fr);">
+              <div>
+                <div class="eyebrow">Vibration (mm/s)</div>
+                <div class="chart-box-sm"><canvas id="sparkVibration"></canvas></div>
+              </div>
+              <div>
+                <div class="eyebrow">Tilt (°)</div>
+                <div class="chart-box-sm"><canvas id="sparkTilt"></canvas></div>
+              </div>
+              <div>
+                <div class="eyebrow">Strain (µε)</div>
+                <div class="chart-box-sm"><canvas id="sparkStrain"></canvas></div>
+              </div>
+            </div>
+
+            <hr class="soft">
+            <div class="flex-between">
+              <div class="section-title" style="font-size:14px;">Maintenance Timeline</div>
+              <button class="btn btn-primary btn-sm" id="genReportBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15h6M9 11h6"/></svg>
+                Generate AI Report
+              </button>
+            </div>
+            <div id="maintenanceTimeline" style="margin-top:12px;"></div>
+          </div>
+
+          <div class="card">
+            <div class="eyebrow">AI Diagnosis</div>
+            <div class="section-title" style="margin-bottom:12px;">Contributing Risk Factors</div>
+            <div id="riskFactors"></div>
+            <hr class="soft">
+            <div class="eyebrow">Latest Detections</div>
+            <div id="twinDetections" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ AI VISION ============ -->
+      <section class="view" id="view-vision">
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="eyebrow">Computer Vision Pipeline</div>
+            <div class="section-title" style="margin-bottom:6px;">Structural Defect Detection</div>
+            <p class="lead" style="margin-bottom:16px;">Upload a photo of a structure — the vision model (YOLOv8-based, fine-tuned on crack/corrosion datasets) will localize and classify defects with confidence scores.</p>
+
+            <div class="dropzone" id="dropzone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M12 3l-4 4M12 3l4 4"/><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/></svg>
+              <div style="font-weight:600;font-size:13.5px;">Drop an image here, or click to browse</div>
+              <div class="dim" style="font-size:11.5px;margin-top:4px;">JPG / PNG · simulated on-device inference for demo</div>
+              <input type="file" id="fileInput" accept="image/*" style="display:none;">
+            </div>
+
+            <div id="detectCanvasWrap">
+              <canvas id="detectCanvas"></canvas>
+            </div>
+
+            <div id="scanningState" style="display:none;margin-top:14px;">
+              <div class="mono" style="font-size:12px;color:var(--cyan);" id="scanText">Initializing model…</div>
+              <div style="height:4px;background:var(--surface-3);border-radius:4px;margin-top:8px;overflow:hidden;">
+                <div id="scanBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));transition:width .25s ease;"></div>
+              </div>
+            </div>
+
+            <div style="margin-top:14px;display:flex;gap:10px;">
+              <button class="btn btn-sm" id="sampleImgBtn">Try sample image</button>
+              <button class="btn btn-sm btn-ghost" id="resetScanBtn" disabled>Reset</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="eyebrow">Detection Results</div>
+            <div class="section-title" style="margin-bottom:12px;">Identified Defects</div>
+            <div id="defectList" class="dim" style="font-size:13px;">No image analyzed yet. Upload or try the sample image to run a live detection demo.</div>
+            <hr class="soft">
+            <div class="eyebrow">Model Card</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">
+              Architecture <span style="float:right;" class="mono">YOLOv8-m</span><br>
+              Training data <span style="float:right;" class="mono">SDNET2018 + METU</span><br>
+              mAP@0.5 <span style="float:right;" class="mono">0.874</span><br>
+              Inference target <span style="float:right;" class="mono">Edge / Cloud</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ COPILOT ============ -->
+      <section class="view" id="view-copilot">
+        <div class="grid" style="grid-template-columns:2.2fr 1fr;">
+          <div class="card">
+            <div class="eyebrow">RAG-Grounded Assistant</div>
+            <div class="section-title" style="margin-bottom:10px;">Ask SENTINEL</div>
+            <div class="chat-window" id="chatWindow"></div>
+            <div class="chat-input-row">
+              <input type="text" id="chatInput" placeholder="Ask about asset risk, budgets, or maintenance…">
+              <button class="btn btn-primary" id="chatSendBtn">Send</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Try asking</div>
+            <div style="margin-top:8px;">
+              <div class="chip" data-q="Which bridges have failure probability above 60% in the next 6 months?">Which bridges have failure probability above 60% in the next 6 months?</div>
+              <div class="chip" data-q="What is the remaining useful life of Godavari Rail Bridge?">RUL of Godavari Rail Bridge?</div>
+              <div class="chip" data-q="Show me the cheapest critical repairs under 50 lakh rupees">Cheapest critical repairs under ₹50L?</div>
+              <div class="chip" data-q="Summarize this week's alerts">Summarize this week's alerts</div>
+            </div>
+            <hr class="soft">
+            <div class="eyebrow">Grounded on</div>
+            <div class="dim" style="font-size:12px;line-height:1.9;">
+              • 128 inspection reports<br>
+              • 42,000 live sensor streams<br>
+              • Historical maintenance logs<br>
+              • Satellite InSAR deformation data
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ OPTIMIZER ============ -->
+      <section class="view" id="view-optimizer">
+        <div class="grid" style="grid-template-columns:1.4fr 1fr;">
+          <div class="card">
+            <div class="eyebrow">Constrained Optimization (Linear Programming)</div>
+            <div class="section-title" style="margin-bottom:6px;">Maintenance Budget Allocator</div>
+            <p class="lead" style="margin-bottom:16px;">Move the slider to set the available annual budget. SENTINEL-X re-ranks and selects the combination of repairs that maximizes total national risk reduction.</p>
+            <div class="flex-between" style="margin-bottom:8px;">
+              <span class="dim" style="font-size:12px;">Annual Budget</span>
+              <span class="mono" id="budgetLabel" style="color:var(--cyan);font-weight:600;">₹2.5 Cr</span>
+            </div>
+            <input type="range" min="0" max="10" step="0.1" value="2.5" id="budgetSlider">
+            <hr class="soft">
+            <div id="optimizerList"></div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Optimization Result</div>
+            <div class="section-title" style="margin-bottom:14px;">Impact Summary</div>
+            <div style="display:flex;flex-direction:column;gap:16px;">
+              <div>
+                <div class="dim" style="font-size:11.5px;">Projects Funded</div>
+                <div class="stat-value" id="optCount" style="font-size:26px;">0</div>
+              </div>
+              <div>
+                <div class="dim" style="font-size:11.5px;">Budget Utilized</div>
+                <div class="stat-value" id="optUtil" style="font-size:26px;color:var(--cyan);">₹0.0 Cr</div>
+              </div>
+              <div>
+                <div class="dim" style="font-size:11.5px;">Total Risk Reduction</div>
+                <div class="stat-value" id="optRisk" style="font-size:26px;color:var(--green);">0%</div>
+              </div>
+            </div>
+            <hr class="soft">
+            <p class="dim" style="font-size:11.5px;line-height:1.6;">Solved via greedy value-density approximation of a 0/1 knapsack LP — swap in OR-Tools/PuLP server-side for exact optimality at scale.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ALERTS ============ -->
+      <section class="view" id="view-alerts">
+        <div class="card">
+          <div class="tabs" id="alertTabs">
+            <div class="tab active" data-f="all">All</div>
+            <div class="tab" data-f="critical">Critical</div>
+            <div class="tab" data-f="maintenance">Maintenance</div>
+            <div class="tab" data-f="weather">Weather</div>
+          </div>
+          <div id="alertsList"></div>
+        </div>
+      </section>
+
+      <!-- ============ CITIZEN ============ -->
+      <section class="view" id="view-citizen">
+        <div class="grid" style="grid-template-columns:1fr 1fr;">
+          <div class="card">
+            <div class="eyebrow">Crowd-Sensing Network</div>
+            <div class="section-title" style="margin-bottom:6px;">Report a Structural Issue</div>
+            <p class="lead" style="margin-bottom:16px;">Every citizen submission is auto-triaged by the same AI vision model used in official inspections, extending coverage at zero infrastructure cost.</p>
+            <form id="citizenForm" onsubmit="return false;">
+              <div style="margin-bottom:12px;">
+                <label class="dim" style="font-size:11.5px;">Photo</label>
+                <div class="dropzone" id="citizenDrop" style="padding:24px;margin-top:6px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:26px;height:26px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <div style="font-size:12.5px;">Tap to attach a photo</div>
+                </div>
+              </div>
+              <div style="margin-bottom:12px;">
+                <label class="dim" style="font-size:11.5px;">Location</label>
+                <input type="text" placeholder="e.g. Near Adyar Bridge, Chennai" style="width:100%;background:var(--surface-3);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:9px;margin-top:6px;font-size:13px;">
+              </div>
+              <div style="margin-bottom:16px;">
+                <label class="dim" style="font-size:11.5px;">Description</label>
+                <textarea rows="3" placeholder="Describe what you noticed…" style="width:100%;background:var(--surface-3);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:9px;margin-top:6px;font-size:13px;resize:vertical;"></textarea>
+              </div>
+              <button class="btn btn-primary" id="citizenSubmitBtn" style="width:100%;justify-content:center;">Submit Report</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="eyebrow">Live Coverage</div>
+            <div class="section-title" style="margin-bottom:12px;">Community Submissions This Month</div>
+            <div class="chart-box"><canvas id="citizenChart"></canvas></div>
+            <hr class="soft">
+            <div id="citizenFeed" class="feed"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div id="toastHost"></div>
+
+<script>
+/* ==================================================================
+   SENTINEL-X PROTOTYPE — client-side demo build
+   NOTE: AI detections, RUL predictions, and copilot answers are
+   simulated with deterministic heuristics for demo purposes.
+   Production wiring points to /ai/vision/detect, /ai/predict/*,
+   and /ai/copilot/query as described in the technical blueprint.
+   ================================================================== */
+
+/* ---------- MOCK DATA ---------- */
+const ASSETS = [
+  {id:'AST-001', name:'Godavari Rail Bridge', type:'Railway Bridge', state:'Andhra Pradesh', lat:16.99, lng:81.78, health:38, risk:'critical', rul:74, failProb:0.68, built:1997, material:'Steel Truss'},
+  {id:'AST-002', name:'Bandra-Worli Sea Link', type:'Flyover', state:'Maharashtra', lat:19.03, lng:72.82, health:82, risk:'healthy', rul:1200, failProb:0.04, built:2009, material:'Cable-Stayed Concrete'},
+  {id:'AST-003', name:'Mullaperiyar Dam', type:'Dam', state:'Kerala', lat:9.53, lng:77.15, health:44, risk:'critical', rul:210, failProb:0.55, built:1895, material:'Lime-Surkhi Masonry'},
+  {id:'AST-004', name:'Chennai Central Station', type:'Building', state:'Tamil Nadu', lat:13.08, lng:80.28, health:71, risk:'moderate', rul:610, failProb:0.19, built:1873, material:'Brick Masonry'},
+  {id:'AST-005', name:'Howrah Bridge', type:'Bridge', state:'West Bengal', lat:22.585, lng:88.346, health:63, risk:'moderate', rul:420, failProb:0.27, built:1943, material:'Steel Cantilever'},
+  {id:'AST-006', name:'Delhi Metro Viaduct - Line 7', type:'Railway Track', state:'Delhi', lat:28.61, lng:77.21, health:90, risk:'healthy', rul:1500, failProb:0.02, built:2018, material:'Prestressed Concrete'},
+  {id:'AST-007', name:'Kalpasar Water Pipeline', type:'Water Pipeline', state:'Gujarat', lat:22.30, lng:72.14, health:52, risk:'moderate', rul:300, failProb:0.31, built:2005, material:'Ductile Iron'},
+  {id:'AST-008', name:'Cochin International Airport - Runway 2', type:'Airport', state:'Kerala', lat:10.15, lng:76.40, health:76, risk:'moderate', rul:800, failProb:0.11, built:2011, material:'Reinforced Concrete'},
+  {id:'AST-009', name:'Malviya Bridge Tunnel Approach', type:'Tunnel', state:'Uttar Pradesh', lat:25.28, lng:82.99, health:29, risk:'critical', rul:45, failProb:0.74, built:1887, material:'Masonry Arch'},
+  {id:'AST-010', name:'Bhakra Nangal Dam', type:'Dam', state:'Himachal Pradesh', lat:31.42, lng:76.43, health:88, risk:'healthy', rul:2000, failProb:0.03, built:1963, material:'Concrete Gravity'},
+];
+
+const ALERTS = [
+  {id:1, type:'critical', asset:'Malviya Bridge Tunnel Approach', msg:'Vibration anomaly exceeds threshold (4.2σ) — recommend immediate inspection.', time:'12 min ago', ack:false},
+  {id:2, type:'critical', asset:'Godavari Rail Bridge', msg:'AI vision flagged new critical corrosion cluster on pier 4.', time:'47 min ago', ack:false},
+  {id:3, type:'weather', asset:'Mullaperiyar Dam', msg:'Heavy rainfall forecast (92mm/24h) — elevated seepage risk.', time:'1 hr ago', ack:false},
+  {id:4, type:'maintenance', asset:'Howrah Bridge', msg:'Scheduled maintenance window due in 5 days.', time:'3 hr ago', ack:true},
+  {id:5, type:'maintenance', asset:'Kalpasar Water Pipeline', msg:'Pressure sensor calibration overdue.', time:'6 hr ago', ack:true},
+  {id:6, type:'weather', asset:'Cochin International Airport - Runway 2', msg:'High wind advisory — monitor expansion joints.', time:'8 hr ago', ack:true},
+];
+
+const OPT_PROJECTS = [
+  {name:'Malviya Bridge Tunnel Approach — pier reinforcement', cost:0.9, riskReduction:22},
+  {name:'Godavari Rail Bridge — corrosion treatment', cost:0.6, riskReduction:18},
+  {name:'Mullaperiyar Dam — seepage control', cost:1.4, riskReduction:20},
+  {name:'Howrah Bridge — joint replacement', cost:0.4, riskReduction:9},
+  {name:'Kalpasar Pipeline — section relining', cost:0.7, riskReduction:11},
+  {name:'Chennai Central Station — facade repair', cost:0.3, riskReduction:6},
+  {name:'Cochin Airport Runway — resurfacing patch', cost:0.5, riskReduction:7},
+  {name:'Delhi Metro Viaduct — bearing inspection', cost:0.2, riskReduction:4},
+];
+
+const iconFor = (type)=>{
+  const t = type.toLowerCase();
+  if(t.includes('dam')) return '<path d="M3 21h18M5 21V10l7-6 7 6v11"/>';
+  if(t.includes('tunnel')) return '<path d="M2 20c0-5 4-9 10-9s10 4 10 9"/><path d="M2 20h20"/>';
+  if(t.includes('pipeline')) return '<path d="M4 8h16M4 16h16"/><circle cx="4" cy="8" r="2"/><circle cx="20" cy="16" r="2"/>';
+  if(t.includes('airport')) return '<path d="M2 16l20-6-4 8-4-2-4 6-2-1 2-6z"/>';
+  if(t.includes('building')||t.includes('station')) return '<path d="M4 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/>';
+  return '<path d="M2 20h20M4 20V12l8-5 8 5v8"/>'; // bridge default
+};
+
+function riskColor(risk){ return risk==='critical' ? 'var(--red)' : risk==='moderate' ? 'var(--amber)' : 'var(--green)'; }
+function riskHex(risk){ return risk==='critical' ? '#FF4D5E' : risk==='moderate' ? '#FFB020' : '#2ECC71'; }
+function riskFromScore(score){ return score < 50 ? 'critical' : score < 80 ? 'moderate' : 'healthy'; }
+
+/* ---------- NAV / ROUTING ---------- */
+const views = ['dashboard','map','twin','vision','copilot','optimizer','alerts','citizen'];
+const titles = {
+  dashboard:['Command Center','NATIONAL INFRASTRUCTURE OVERVIEW · LIVE'],
+  map:['GIS Asset Map','INTERACTIVE GEOSPATIAL RISK VIEW'],
+  twin:['Digital Twin','ASSET-LEVEL PREDICTIVE INTELLIGENCE'],
+  vision:['AI Vision Scan','COMPUTER-VISION DEFECT DETECTION'],
+  copilot:['Ask SENTINEL','RAG-GROUNDED INFRASTRUCTURE COPILOT'],
+  optimizer:['Budget Optimizer','LP-CONSTRAINED MAINTENANCE PLANNING'],
+  alerts:['Alerts','REAL-TIME RISK NOTIFICATIONS'],
+  citizen:['Citizen Reports','CROWD-SOURCED STRUCTURAL SENSING'],
+};
+function go(view){
+  views.forEach(v=>{
+    document.getElementById('view-'+v).classList.toggle('active', v===view);
+  });
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.view===view));
+  document.getElementById('pageTitle').textContent = titles[view][0];
+  document.getElementById('pageSub').textContent = titles[view][1];
+  document.getElementById('sidebar').classList.remove('open');
+  if(view==='map') setTimeout(()=>{ if(mapInstance){ mapInstance.invalidateSize(); } }, 60);
+}
+document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click', ()=>go(el.dataset.view)));
+document.getElementById('menuBtn').addEventListener('click', ()=>document.getElementById('sidebar').classList.toggle('open'));
+
+/* ---------- CLOCK ---------- */
+function tickClock(){
+  const d = new Date();
+  document.getElementById('clock').textContent = d.toLocaleTimeString('en-IN',{hour12:false}) + ' IST';
+}
+tickClock(); setInterval(tickClock, 1000);
+
+/* ---------- TOASTS ---------- */
+function toast(msg){
+  const host = document.getElementById('toastHost');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><div>${msg}</div>`;
+  host.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 4200);
+}
+
+/* ---------- HEALTH RING BUILDER ---------- */
+function healthRing(score, size=64, stroke=6){
+  const r = (size-stroke)/2, c = 2*Math.PI*r;
+  const off = c - (score/100)*c;
+  const color = riskHex(riskFromScore(score));
+  const pulse = score < 50 ? 'pulse-critical' : '';
+  return `<div class="ring-wrap ${pulse}" style="width:${size}px;height:${size}px;">
+    <svg width="${size}" height="${size}">
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="var(--border)" stroke-width="${stroke}" fill="none"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="${color}" stroke-width="${stroke}" fill="none"
+        stroke-dasharray="${c}" stroke-dashoffset="${off}" stroke-linecap="round"/>
+    </svg>
+    <div class="ring-num"><div class="n" style="font-size:${size*0.28}px;color:${color};">${score}</div><div class="l">score</div></div>
+  </div>`;
+}
+
+/* ---------- DASHBOARD ---------- */
+function renderDashboard(){
+  const total = ASSETS.length;
+  const critical = ASSETS.filter(a=>a.risk==='critical').length;
+  const avgHealth = Math.round(ASSETS.reduce((s,a)=>s+a.health,0)/total);
+  animateCount('statTotal', total);
+  animateCount('statCritical', critical);
+  animateCount('statHealth', avgHealth);
+  animateCount('statAlerts', ALERTS.filter(a=>!a.ack).length);
+
+  const watchlist = document.getElementById('watchlist');
+  watchlist.innerHTML = ASSETS.slice().sort((a,b)=>a.health-b.health).slice(0,4).map(a=>`
+    <div class="asset-row" onclick="openTwin('${a.id}')">
+      <div class="asset-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${iconFor(a.type)}</svg></div>
+      <div style="flex:1;min-width:0;">
+        <div class="asset-name">${a.name}</div>
+        <div class="asset-meta">${a.state} · ${a.type}</div>
+      </div>
+      <span class="badge badge-${a.risk==='critical'?'critical':a.risk==='moderate'?'moderate':'healthy'}">${a.risk}</span>
+      <div style="width:40px;text-align:right;font-family:var(--font-mono);font-weight:700;color:${riskColor(a.risk)};">${a.health}</div>
+    </div>`).join('');
+
+  buildRiskChart();
+  buildCoverageChart();
+  buildCategoryChart();
+  startSignalFeed();
+}
+
+function animateCount(id, target){
+  const el = document.getElementById(id);
+  let cur = 0; const step = Math.max(1, Math.ceil(target/30));
+  const iv = setInterval(()=>{
+    cur += step;
+    if(cur>=target){ cur=target; clearInterval(iv); }
+    el.textContent = cur;
+  }, 25);
+}
+
+let riskChartInst, coverageChartInst, categoryChartInst, decayChartInst, citizenChartInst;
+const sparkInsts = {};
+
+function chartDefaults(){
+  Chart.defaults.color = '#8291AC';
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.borderColor = 'rgba(34,48,74,0.6)';
+}
+chartDefaults();
+
+function buildRiskChart(){
+  const ctx = document.getElementById('riskChart');
+  if(riskChartInst) riskChartInst.destroy();
+  const critical = ASSETS.filter(a=>a.risk==='critical').length;
+  const moderate = ASSETS.filter(a=>a.risk==='moderate').length;
+  const healthy = ASSETS.filter(a=>a.risk==='healthy').length;
+  riskChartInst = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:['Critical','Moderate','Healthy'], datasets:[{ data:[critical,moderate,healthy], backgroundColor:['#FF4D5E','#FFB020','#2ECC71'], borderColor:'#0A0F1C', borderWidth:3 }]},
+    options:{ plugins:{legend:{position:'right', labels:{boxWidth:10, padding:14, font:{size:11}}}}, cutout:'68%', responsive:true, maintainAspectRatio:false }
+  });
+}
+function buildCoverageChart(){
+  const ctx = document.getElementById('coverageChart');
+  if(coverageChartInst) coverageChartInst.destroy();
+  coverageChartInst = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:['Jan','Feb','Mar','Apr','May','Jun'],
+      datasets:[
+        {label:'Manual Inspections', data:[12,10,14,9,11,8], backgroundColor:'#22304A'},
+        {label:'AI-Continuous Scans', data:[40,55,70,88,120,168], backgroundColor:'#00D9FF'}
+      ]},
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{grid:{display:false}}, y:{grid:{color:'rgba(34,48,74,0.4)'}} }, plugins:{legend:{labels:{boxWidth:10,font:{size:11}}}} }
+  });
+}
+function buildCategoryChart(){
+  const ctx = document.getElementById('categoryChart');
+  if(categoryChartInst) categoryChartInst.destroy();
+  const types = {};
+  ASSETS.forEach(a=>{ types[a.type]=(types[a.type]||0)+1; });
+  categoryChartInst = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:Object.keys(types), datasets:[{ data:Object.values(types), backgroundColor:'#00D9FF', borderRadius:6 }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{grid:{color:'rgba(34,48,74,0.4)'}}, y:{grid:{display:false}} } }
+  });
+}
+
+const FEED_TEMPLATES = [
+  a=>`AI Vision flagged new ${['hairline crack','corrosion patch','tilt deviation'][Math.floor(Math.random()*3)]} on <b>${a.name}</b>`,
+  a=>`Vibration sensor on <b>${a.name}</b> reported ${(Math.random()*2+1).toFixed(2)}σ deviation`,
+  a=>`RUL model recalculated for <b>${a.name}</b> — updated to ${a.rul} days`,
+  a=>`Satellite InSAR pass detected ${(Math.random()*3).toFixed(1)}mm ground shift near <b>${a.name}</b>`,
+  a=>`Citizen report near <b>${a.name}</b> auto-verified by triage model`,
+];
+function startSignalFeed(){
+  const feed = document.getElementById('signalFeed');
+  feed.innerHTML='';
+  function addEntry(){
+    const a = ASSETS[Math.floor(Math.random()*ASSETS.length)];
+    const msg = FEED_TEMPLATES[Math.floor(Math.random()*FEED_TEMPLATES.length)](a);
+    const dotColor = a.risk==='critical' ? 'var(--red)' : a.risk==='moderate' ? 'var(--amber)' : 'var(--cyan)';
+    const div = document.createElement('div');
+    div.className='feed-item';
+    const now = new Date();
+    div.innerHTML = `<span class="t">${now.toLocaleTimeString('en-IN',{hour12:false})}</span><span class="feed-dot" style="background:${dotColor};"></span><span>${msg}</span>`;
+    feed.prepend(div);
+    while(feed.children.length>40) feed.removeChild(feed.lastChild);
+  }
+  for(let i=0;i<8;i++) addEntry();
+  if(window._feedInterval) clearInterval(window._feedInterval);
+  window._feedInterval = setInterval(addEntry, 3500);
+}
+
+/* ---------- MAP ---------- */
+let mapInstance = null;
+function renderMap(){
+  const listEl = document.getElementById('mapAssetList');
+  const filterEl = document.getElementById('mapFilters');
+  const filters = ['all','critical','moderate','healthy'];
+  filterEl.innerHTML = filters.map(f=>`<span class="chip" data-f="${f}" style="cursor:pointer;">${f}</span>`).join('');
+  let active='all';
+  filterEl.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{ active=c.dataset.f; renderList(); }));
+
+  function renderList(){
+    const filtered = active==='all' ? ASSETS : ASSETS.filter(a=>a.risk===active);
+    listEl.innerHTML = filtered.map(a=>`
+      <div class="asset-row" onclick="focusAsset('${a.id}')">
+        <div class="asset-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${iconFor(a.type)}</svg></div>
+        <div style="flex:1;min-width:0;">
+          <div class="asset-name">${a.name}</div>
+          <div class="asset-meta">${a.state}</div>
+        </div>
+        <span class="badge badge-${a.risk==='critical'?'critical':a.risk==='moderate'?'moderate':'healthy'}">${a.health}</span>
+      </div>`).join('');
+  }
+  renderList();
+
+  if(!mapInstance){
+    mapInstance = L.map('leaflet-map', {zoomControl:true}).setView([21.5,79.5], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap contributors' }).addTo(mapInstance);
+    window._markers = {};
+    ASSETS.forEach(a=>{
+      const marker = L.circleMarker([a.lat,a.lng], {
+        radius: 9, color:riskHex(a.risk), fillColor:riskHex(a.risk), fillOpacity:0.55, weight:2
+      }).addTo(mapInstance);
+      marker.bindPopup(`<b>${a.name}</b><br>${a.type} · ${a.state}<br>Health Score: <b style="color:${riskHex(a.risk)}">${a.health}</b><br><a href="javascript:openTwin('${a.id}')" style="color:#00D9FF;">Open Digital Twin →</a>`);
+      window._markers[a.id]=marker;
+    });
+  }
+}
+function focusAsset(id){
+  const a = ASSETS.find(x=>x.id===id);
+  if(mapInstance && a){ mapInstance.setView([a.lat,a.lng], 8, {animate:true}); window._markers[id].openPopup(); }
+}
+window.focusAsset = focusAsset;
+
+/* ---------- DIGITAL TWIN ---------- */
+let currentTwinId = ASSETS[0].id;
+function populateTwinSelect(){
+  const sel = document.getElementById('twinAssetSelect');
+  sel.innerHTML = ASSETS.map(a=>`<option value="${a.id}">${a.name} — ${a.state}</option>`).join('');
+  sel.value = currentTwinId;
+  sel.addEventListener('change', ()=>openTwin(sel.value));
+}
+function openTwin(id){
+  currentTwinId = id;
+  go('twin');
+  document.getElementById('twinAssetSelect').value = id;
+  const a = ASSETS.find(x=>x.id===id);
+  document.getElementById('twinType').textContent = a.type.toUpperCase()+' · '+a.material.toUpperCase();
+  document.getElementById('twinName').textContent = a.name;
+  document.getElementById('twinLoc').textContent = `${a.state} · ${a.lat.toFixed(2)}°N, ${a.lng.toFixed(2)}°E · Built ${a.built}`;
+  document.getElementById('twinRingWrap').outerHTML = `<div class="ring-wrap-holder" id="twinRingWrap">${healthRing(a.health, 74, 7)}</div>`;
+  document.getElementById('timeSlider').value = 0;
+  buildDecayChart(a, 0);
+  buildSparklines(a);
+  renderRiskFactors(a);
+  renderTwinDetections(a);
+  renderMaintenanceTimeline(a);
+  document.getElementById('twinDayLabel').textContent = 'Today (+0 days)';
+}
+window.openTwin = openTwin;
+
+function projectedScore(a, days){
+  const decayRate = (1 - a.failProb) > 0 ? (a.failProb*0.09 + 0.02) : 0.11;
+  const val = a.health - decayRate*days*(0.9+Math.sin(days/40)*0.05);
+  return Math.max(2, Math.round(val));
+}
+function buildDecayChart(a, currentDay){
+  const ctx = document.getElementById('decayChart');
+  const labels=[], data=[];
+  for(let d=0; d<=365; d+=15){ labels.push(d===0?'Today':'+'+d+'d'); data.push(projectedScore(a,d)); }
+  if(decayChartInst) decayChartInst.destroy();
+  decayChartInst = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{
+      data, borderColor:'#00D9FF', backgroundColor:'rgba(0,217,255,0.08)', fill:true, tension:0.35, pointRadius:0, borderWidth:2.5
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
+      annotation:undefined },
+      scales:{ y:{min:0,max:100, grid:{color:'rgba(34,48,74,0.4)'}}, x:{grid:{display:false}, ticks:{maxTicksLimit:6}} } }
+  });
+}
+function buildSparklines(a){
+  const configs = [
+    {id:'sparkVibration', base:2.1, noise:0.9, color:'#00D9FF'},
+    {id:'sparkTilt', base:0.4, noise:0.15, color:'#FFB020'},
+    {id:'sparkStrain', base:120, noise:40, color:'#FF4D5E'},
+  ];
+  configs.forEach(c=>{
+    const data = Array.from({length:24}, ()=> (c.base + (Math.random()-0.5)*c.noise*(a.risk==='critical'?2:1)).toFixed(2));
+    if(sparkInsts[c.id]) sparkInsts[c.id].destroy();
+    sparkInsts[c.id] = new Chart(document.getElementById(c.id), {
+      type:'line',
+      data:{ labels:data.map((_,i)=>i), datasets:[{ data, borderColor:c.color, borderWidth:1.8, pointRadius:0, tension:0.4 }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{display:false}, y:{display:false} } }
+    });
+  });
+}
+function renderRiskFactors(a){
+  const factors = [
+    {label:'Material Fatigue (Age-adjusted)', val: Math.min(95, Math.round((2026-a.built)/2))},
+    {label:'Vibration Anomaly Index', val: a.risk==='critical'?82: a.risk==='moderate'?46:14},
+    {label:'Corrosion Probability', val: Math.round((1-a.health/100)*100)},
+    {label:'Environmental Stress (Weather)', val: a.state==='Kerala'||a.state==='West Bengal'?64:33},
+  ];
+  document.getElementById('riskFactors').innerHTML = factors.map(f=>`
+    <div style="margin-bottom:12px;">
+      <div class="flex-between" style="margin-bottom:5px;"><span style="font-size:12.5px;">${f.label}</span><span class="mono" style="font-size:12px;color:${f.val>60?'var(--red)':f.val>35?'var(--amber)':'var(--green)'}">${f.val}%</span></div>
+      <div style="height:5px;background:var(--surface-3);border-radius:4px;"><div style="height:100%;width:${f.val}%;border-radius:4px;background:${f.val>60?'var(--red)':f.val>35?'var(--amber)':'var(--green)'};"></div></div>
+    </div>`).join('');
+}
+function renderTwinDetections(a){
+  const defects = a.risk==='critical'
+    ? [['Crack','Critical',0.93],['Corrosion','Moderate',0.81]]
+    : a.risk==='moderate' ? [['Corrosion','Moderate',0.71]] : [['—','None detected',1]];
+  document.getElementById('twinDetections').innerHTML = defects.map(d=>`
+    <div class="asset-row" style="cursor:default;">
+      <span class="badge badge-${d[1]==='Critical'?'critical':d[1]==='Moderate'?'moderate':'healthy'}">${d[1]}</span>
+      <div style="flex:1;font-size:12.5px;">${d[0]}</div>
+      <div class="mono dim" style="font-size:11px;">${(d[2]*100).toFixed(0)}% conf.</div>
+    </div>`).join('');
+}
+function renderMaintenanceTimeline(a){
+  const events = [
+    {d:'2024-03-12', e:'Routine visual inspection completed'},
+    {d:'2024-11-02', e:'Sensor array recalibrated'},
+    {d:'2025-06-18', e:'Minor joint repair completed'},
+    {d:'2026-05-01', e:'AI flagged escalating risk trend'},
+  ];
+  document.getElementById('maintenanceTimeline').innerHTML = events.map(ev=>`
+    <div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px dashed var(--border-soft);">
+      <div class="mono dim" style="font-size:11px;width:90px;flex-shrink:0;">${ev.d}</div>
+      <div style="font-size:12.5px;">${ev.e}</div>
+    </div>`).join('');
+}
+document.getElementById('timeSlider').addEventListener('input', (e)=>{
+  const days = parseInt(e.target.value);
+  const a = ASSETS.find(x=>x.id===currentTwinId);
+  const score = projectedScore(a, days);
+  document.getElementById('twinDayLabel').textContent = days===0 ? 'Today (+0 days)' : `+${days} days`;
+  document.getElementById('twinRingWrap').innerHTML = healthRing(score, 74, 7);
+});
+document.getElementById('genReportBtn').addEventListener('click', ()=>{
+  const a = ASSETS.find(x=>x.id===currentTwinId);
+  const days = parseInt(document.getElementById('timeSlider').value);
+  const projected = projectedScore(a, days);
+  const report = `SENTINEL-X INFRASTRUCTURE HEALTH REPORT
+==========================================
+Asset: ${a.name} (${a.id})
+Type: ${a.type} | Material: ${a.material} | Built: ${a.built}
+Location: ${a.state} (${a.lat}, ${a.lng})
+Generated: ${new Date().toLocaleString('en-IN')}
+
+CURRENT STATUS
+--------------
+Structural Health Score: ${a.health}/100
+Risk Classification: ${a.risk.toUpperCase()}
+Remaining Useful Life: ${a.rul} days
+Failure Probability (12mo): ${(a.failProb*100).toFixed(1)}%
+
+PROJECTED STATUS (+${days} days)
+--------------
+Projected Health Score: ${projected}/100
+
+AI-GENERATED SUMMARY
+--------------
+${a.name} currently shows a ${a.risk} risk profile driven primarily by
+material fatigue consistent with its ${new Date().getFullYear()-a.built}-year service life.
+Continuous sensor monitoring and computer-vision inspection recommend
+${a.risk==='critical' ? 'immediate on-site inspection and prioritized budget allocation.' : a.risk==='moderate' ? 'scheduled maintenance within the next quarter.' : 'standard periodic monitoring, no immediate action required.'}
+
+RECOMMENDATION
+--------------
+${a.risk==='critical' ? 'Escalate to Priority 1 maintenance queue. Estimated repair cost range: ₹40L–₹90L.' : a.risk==='moderate' ? 'Add to next quarterly maintenance cycle. Estimated cost range: ₹10L–₹40L.' : 'No action required. Continue standard monitoring cadence.'}
+
+--
+Generated by SENTINEL-X AI Infrastructure Guardian (prototype demo report)
+`;
+  const blob = new Blob([report], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = `${a.id}_health_report.txt`;
+  document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  toast(`AI report generated and downloaded for <b>${a.name}</b>.`);
+});
+
+/* ---------- AI VISION ---------- */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', ()=>fileInput.click());
+['dragenter','dragover'].forEach(ev=>dropzone.addEventListener(ev, e=>{e.preventDefault(); dropzone.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev, e=>{e.preventDefault(); dropzone.classList.remove('drag');}));
+dropzone.addEventListener('drop', e=>{ const f = e.dataTransfer.files[0]; if(f) handleImage(f); });
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleImage(e.target.files[0]); });
+document.getElementById('sampleImgBtn').addEventListener('click', ()=>{
+  // Generate a synthetic "sample structure photo" on a canvas so the demo works fully offline.
+  const c = document.createElement('canvas'); c.width=640; c.height=420;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,420); grad.addColorStop(0,'#7d8a9a'); grad.addColorStop(1,'#4d5766');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,640,420);
+  ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=6;
+  for(let i=0;i<6;i++){ ctx.beginPath(); ctx.moveTo(0, 60+i*60); ctx.lineTo(640,60+i*60); ctx.stroke(); }
+  for(let i=0;i<10;i++){ ctx.beginPath(); ctx.moveTo(i*64,0); ctx.lineTo(i*64,420); ctx.stroke(); }
+  ctx.strokeStyle='rgba(20,20,20,0.65)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(120,80); ctx.lineTo(210,190); ctx.lineTo(180,340); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(420,60); ctx.lineTo(460,220); ctx.stroke();
+  ctx.fillStyle='rgba(90,60,40,0.55)'; ctx.beginPath(); ctx.ellipse(480,300,55,30,0.3,0,Math.PI*2); ctx.fill();
+  c.toBlob(blob=>handleImage(new File([blob], 'sample-structure.png', {type:'image/png'})));
+});
+document.getElementById('resetScanBtn').addEventListener('click', ()=>{
+  document.getElementById('detectCanvasWrap').style.display='none';
+  dropzone.style.display='block';
+  document.getElementById('defectList').innerHTML = 'No image analyzed yet. Upload or try the sample image to run a live detection demo.';
+  document.getElementById('defectList').className = 'dim';
+  document.getElementById('resetScanBtn').disabled = true;
+});
+
+function handleImage(file){
+  const img = new Image();
+  img.onload = ()=>{
+    dropzone.style.display='none';
+    const wrap = document.getElementById('detectCanvasWrap');
+    wrap.style.display='block';
+    const canvas = document.getElementById('detectCanvas');
+    const scale = Math.min(1, 760/img.width);
+    canvas.width = img.width*scale; canvas.height = img.height*scale;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    runScanAnimation(canvas, ctx);
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+function seededRandom(seed){ let x = Math.sin(seed)*10000; return x - Math.floor(x); }
+
+function runScanAnimation(canvas, ctx){
+  const scanState = document.getElementById('scanningState');
+  const scanText = document.getElementById('scanText');
+  const scanBar = document.getElementById('scanBar');
+  scanState.style.display='block';
+  document.getElementById('resetScanBtn').disabled = false;
+  const steps = ['Loading YOLOv8-m weights…','Preprocessing image tensor…','Running inference…','Localizing candidate defects…','Classifying severity…','Finalizing report…'];
+  let i=0;
+  const iv = setInterval(()=>{
+    scanText.textContent = steps[i];
+    scanBar.style.width = Math.round(((i+1)/steps.length)*100)+'%';
+    i++;
+    if(i>=steps.length){
+      clearInterval(iv);
+      setTimeout(()=>{ scanState.style.display='none'; drawDetections(canvas, ctx); }, 300);
+    }
+  }, 380);
+}
+
+function drawDetections(canvas, ctx){
+  // Deterministic pseudo-random defect boxes seeded from canvas size, simulating model output.
+  const w = canvas.width, h = canvas.height;
+  const seed = w*h;
+  const count = 2 + Math.floor(seededRandom(seed)*2);
+  const types = [['Crack','critical',(0.86+seededRandom(seed+1)*0.1)],['Corrosion','moderate',(0.7+seededRandom(seed+2)*0.15)],['Deformation','moderate',(0.65+seededRandom(seed+3)*0.2)]];
+  const wrap = document.getElementById('detectCanvasWrap');
+  wrap.querySelectorAll('.det-tag').forEach(t=>t.remove());
+  const results = [];
+  for(let k=0;k<count;k++){
+    const s = seed+k*13.7;
+    const bw = w*(0.14+seededRandom(s)*0.12);
+    const bh = h*(0.10+seededRandom(s+1)*0.10);
+    const bx = w*0.08 + seededRandom(s+2)*(w*0.7);
+    const by = h*0.1 + seededRandom(s+3)*(h*0.6);
+    const [label, sev, conf] = types[k % types.length];
+    const color = sev==='critical' ? '#FF4D5E' : sev==='moderate' ? '#FFB020' : '#2ECC71';
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.strokeRect(bx,by,bw,bh);
+    ctx.fillStyle = color; ctx.globalAlpha = 0.08; ctx.fillRect(bx,by,bw,bh); ctx.globalAlpha=1;
+    const tag = document.createElement('div');
+    tag.className='det-tag';
+    tag.style.left = bx+'px'; tag.style.top = by+'px';
+    tag.style.background = color; tag.style.color = '#0A0F1C';
+    tag.textContent = `${label} · ${(conf*100).toFixed(0)}%`;
+    wrap.appendChild(tag);
+    results.push({label, sev, conf});
+  }
+  const listEl = document.getElementById('defectList');
+  listEl.className='';
+  listEl.innerHTML = results.map(r=>`
+    <div class="asset-row" style="cursor:default;padding:10px;">
+      <span class="badge badge-${r.sev==='critical'?'critical':'moderate'}">${r.sev}</span>
+      <div style="flex:1;font-size:13px;font-weight:600;">${r.label}</div>
+      <div class="mono dim" style="font-size:11.5px;">${(r.conf*100).toFixed(1)}% conf.</div>
+    </div>`).join('') + `<div class="dim" style="font-size:11px;margin-top:10px;">⚠ ${results.filter(r=>r.sev==='critical').length} critical finding(s) — recommend scheduling on-site inspection.</div>`;
+  toast(`AI Vision analysis complete — ${results.length} defect(s) identified.`);
+}
+
+/* ---------- COPILOT ---------- */
+const chatWindow = document.getElementById('chatWindow');
+function addMsg(text, who){
+  const div = document.createElement('div');
+  div.className = 'msg '+who;
+  div.innerHTML = text;
+  chatWindow.appendChild(div);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+  return div;
+}
+function copilotAnswer(q){
+  const lower = q.toLowerCase();
+  if(lower.includes('failure probability') || lower.includes('60%')){
+    const hits = ASSETS.filter(a=>a.failProb>=0.5).sort((a,b)=>b.failProb-a.failProb);
+    return `Found <b>${hits.length}</b> assets exceeding a 50% failure probability in the projected window:<br>` +
+      hits.map(a=>`• ${a.name} — ${(a.failProb*100).toFixed(0)}% <span class="cite">risk_predictions.json</span>`).join('<br>') +
+      `<br><br>Recommend prioritizing <b>${hits[0].name}</b> given both probability and criticality of location.`;
+  }
+  if(lower.includes('rul') || lower.includes('remaining useful life') || lower.includes('godavari')){
+    const a = ASSETS.find(x=>x.name.toLowerCase().includes('godavari'));
+    return `<b>${a.name}</b> has an estimated Remaining Useful Life of <b>${a.rul} days</b> under current load and environmental conditions <span class="cite">rul_model_v3</span>. This is derived from vibration trend analysis, material fatigue curves, and last inspection dated 2026-05-01.`;
+  }
+  if(lower.includes('cheapest') || lower.includes('50 lakh') || lower.includes('budget')){
+    const hits = OPT_PROJECTS.filter(p=>p.cost<=0.5).sort((a,b)=>a.cost-b.cost);
+    return `Under ₹50L, the most impactful options are:<br>` + hits.map(p=>`• ${p.name} — ₹${p.cost.toFixed(1)}Cr, −${p.riskReduction}% risk <span class="cite">budget_optimizer</span>`).join('<br>');
+  }
+  if(lower.includes('alert') || lower.includes('summarize')){
+    const crit = ALERTS.filter(a=>a.type==='critical').length;
+    return `This week: <b>${crit} critical alerts</b>, ${ALERTS.filter(a=>a.type==='maintenance').length} maintenance reminders, and ${ALERTS.filter(a=>a.type==='weather').length} weather advisories <span class="cite">alerts_log</span>. Most urgent: "${ALERTS[0].msg}"`;
+  }
+  return `Based on current sensor and inspection data, I don't have a precise match for that — try asking about a specific asset name, risk threshold, or budget figure. <span class="cite">rag_index</span>`;
+}
+function sendChat(text){
+  if(!text.trim()) return;
+  addMsg(text, 'user');
+  document.getElementById('chatInput').value='';
+  const typing = addMsg('<span class="typing-dots"><span></span><span></span><span></span></span>', 'ai');
+  setTimeout(()=>{
+    typing.innerHTML = copilotAnswer(text);
+  }, 900+Math.random()*600);
+}
+document.getElementById('chatSendBtn').addEventListener('click', ()=>sendChat(document.getElementById('chatInput').value));
+document.getElementById('chatInput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendChat(e.target.value); });
+document.querySelectorAll('.chip[data-q]').forEach(c=>c.addEventListener('click', ()=>sendChat(c.dataset.q)));
+function initCopilot(){
+  addMsg('Hi, I\'m the SENTINEL-X copilot. I can answer questions about asset risk, RUL, budgets, and alerts — grounded in live inspection and sensor data. Try one of the suggestions on the right.', 'ai');
+}
+
+/* ---------- OPTIMIZER ---------- */
+function runOptimizer(budget){
+  // Greedy value-density knapsack approximation (risk-reduction per rupee).
+  const sorted = OPT_PROJECTS.slice().sort((a,b)=>(b.riskReduction/b.cost)-(a.riskReduction/a.cost));
+  let remaining = budget, selected=[], totalRisk=0, totalCost=0;
+  sorted.forEach(p=>{
+    if(p.cost<=remaining){ selected.push(p); remaining-=p.cost; totalRisk+=p.riskReduction; totalCost+=p.cost; }
+  });
+  document.getElementById('optimizerList').innerHTML = OPT_PROJECTS.map(p=>{
+    const sel = selected.includes(p);
+    return `<div class="opt-row ${sel?'selected':''}">
+      <div class="opt-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${p.name}</div>
+        <div class="dim mono" style="font-size:11px;margin-top:2px;">₹${p.cost.toFixed(1)} Cr · risk reduction ${p.riskReduction}%</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('optCount').textContent = selected.length;
+  document.getElementById('optUtil').textContent = `₹${totalCost.toFixed(1)} Cr`;
+  document.getElementById('optRisk').textContent = `${totalRisk}%`;
+}
+document.getElementById('budgetSlider').addEventListener('input', e=>{
+  const v = parseFloat(e.target.value);
+  document.getElementById('budgetLabel').textContent = `₹${v.toFixed(1)} Cr`;
+  runOptimizer(v);
+});
+
+/* ---------- ALERTS ---------- */
+function renderAlerts(filter='all'){
+  const list = filter==='all' ? ALERTS : ALERTS.filter(a=>a.type===filter);
+  document.getElementById('alertsList').innerHTML = list.map(a=>`
+    <div class="asset-row" style="cursor:default;align-items:flex-start;">
+      <span class="badge badge-${a.type==='critical'?'critical':a.type==='weather'?'info':'moderate'}">${a.type}</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${a.asset}</div>
+        <div class="dim" style="font-size:12.5px;margin-top:3px;">${a.msg}</div>
+        <div class="dim mono" style="font-size:10.5px;margin-top:5px;">${a.time}</div>
+      </div>
+      <button class="btn btn-sm ${a.ack?'btn-ghost':'btn-primary'}" onclick="ackAlert(${a.id})" ${a.ack?'disabled':''}>${a.ack?'Acknowledged':'Acknowledge'}</button>
+    </div>`).join('');
+  document.getElementById('alertNavBadge').textContent = ALERTS.filter(a=>!a.ack).length;
+}
+function ackAlert(id){
+  const a = ALERTS.find(x=>x.id===id); if(a){ a.ack=true; renderAlerts(document.querySelector('#alertTabs .tab.active').dataset.f); toast('Alert acknowledged.'); animateCount('statAlerts', ALERTS.filter(x=>!x.ack).length); }
+}
+window.ackAlert = ackAlert;
+document.querySelectorAll('#alertTabs .tab').forEach(t=>t.addEventListener('click', ()=>{
+  document.querySelectorAll('#alertTabs .tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active'); renderAlerts(t.dataset.f);
+}));
+
+/* ---------- CITIZEN ---------- */
+function buildCitizenChart(){
+  const ctx = document.getElementById('citizenChart');
+  if(citizenChartInst) citizenChartInst.destroy();
+  citizenChartInst = new Chart(ctx, {
+    type:'line',
+    data:{ labels:['W1','W2','W3','W4'], datasets:[{ data:[14,22,31,47], borderColor:'#00D9FF', backgroundColor:'rgba(0,217,255,0.08)', fill:true, tension:0.35 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{grid:{color:'rgba(34,48,74,0.4)'}}, x:{grid:{display:false}} } }
+  });
+}
+const CITIZEN_SAMPLES = [
+  'Pothole + hairline crack reported near Howrah Bridge approach — AI Triage: Moderate',
+  'Water seepage photo submitted near Kalpasar Pipeline — AI Triage: Verified, routed to PWD',
+  'Wall crack reported near Chennai Central — AI Triage: Low severity, logged',
+];
+function renderCitizenFeed(){
+  document.getElementById('citizenFeed').innerHTML = CITIZEN_SAMPLES.map(s=>`
+    <div class="feed-item"><span class="feed-dot" style="background:var(--cyan);"></span><span>${s}</span></div>`).join('');
+}
+document.getElementById('citizenDrop').addEventListener('click', ()=>toast('Photo attached (demo mode).'));
+document.getElementById('citizenSubmitBtn').addEventListener('click', ()=>{
+  toast('AI Triage complete: <b>Moderate crack detected</b> — report routed to Municipal Engineering Dept.');
+  document.getElementById('citizenForm').reset();
+});
+
+/* ---------- INIT ---------- */
+function init(){
+  renderDashboard();
+  renderMap();
+  populateTwinSelect();
+  openTwin(ASSETS[0].id);
+  initCopilot();
+  runOptimizer(2.5);
+  renderAlerts('all');
+  buildCitizenChart();
+  renderCitizenFeed();
+}
+init();
+</script>
+</body>
+</html>
